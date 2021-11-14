@@ -3,6 +3,9 @@
 #include <errno.h>
 #include <pthread.h>
 #include <stdlib.h>
+#include <time.h>
+
+#include "monoclock.h"
 
 #include "pthread_create_blocking_np.h"
 
@@ -77,6 +80,36 @@ wrapped_thread(void * cookie)
 	return (start_routine(arg));
 }
 
+/* Wait up to 1 second, or until the condition variable is signalled. */
+static int
+cond_timedwait(struct wrapped_cookie * U)
+{
+	struct timespec tp = {0};
+	struct timeval tv;
+	int rc;
+
+	/* 1 second later than the current time. */
+	if (monoclock_get(&tv)) {
+		rc = errno;
+		goto err0;
+	}
+	tp.tv_sec = tv.tv_sec + 1;
+	tp.tv_nsec = 1000 * tv.tv_usec;
+
+	/* Wait for up to 1 second. */
+	if ((rc = pthread_cond_timedwait(&U->cond, &U->mutex, &tp)) != 0) {
+		if (rc != ETIMEDOUT)
+			goto err0;
+	}
+
+	/* Success! */
+	return (0);
+
+err0:
+	/* Failed! */
+	return (rc);
+}
+
 /**
  * pthread_create_blocking_np(thread, attr, start_routine, arg):
  * Run pthread_create() and block until the the ${thread} has started.  The
@@ -124,8 +157,11 @@ pthread_create_blocking_np(pthread_t * restrict thread,
 
 	/* Wait for the thread to have started, then unlock the mutex. */
 	while (!U->running) {
-		/* Wait until signalled. */
-		if ((rc = pthread_cond_wait(&U->cond, &U->mutex)) != 0)
+		/*
+		 * Wait up to 1 second, or until the conditional variable is
+		 * signalled.
+		 */
+		if ((rc = cond_timedwait(U)) != 0)
 			goto err5;
 
 		/* Quit if there was an error in the synchronization. */
