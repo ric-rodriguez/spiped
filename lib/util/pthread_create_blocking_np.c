@@ -92,7 +92,14 @@ pthread_create_blocking_np(pthread_t * restrict thread,
 	struct wrapped_cookie * U;
 	int rc;
 
-	/* Allocate our cookie and store parameters. */
+	/*
+	 * Allocate our cookie and store parameters.  The C standard does not
+	 * require that variables with automatic storage duration are
+	 * accessible by other threads; POSIX (and thus pthreads) does provide
+	 * that guarantee, but out of an abundance of caution we take the
+	 * option of using malloc in case this code ends up running on a
+	 * non-POSIX system.
+	 */
 	if ((U = malloc(sizeof(struct wrapped_cookie))) == NULL) {
 		rc = errno;
 		goto err0;
