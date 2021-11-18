@@ -136,10 +136,8 @@ pthread_create_blocking_np(pthread_t * restrict thread,
 			goto err5;
 
 		/* Quit if there was an error in the synchronization. */
-		if (U->rc_sync) {
-			rc = U->rc_sync;
+		if ((rc = U->rc_sync) != 0)
 			goto err5;
-		}
 	}
 	if ((rc = pthread_mutex_unlock(&U->mutex)) != 0)
 		goto err4;
