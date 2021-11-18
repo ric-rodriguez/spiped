@@ -62,7 +62,10 @@ wrapped_thread(void * cookie)
 	void * arg;
 	int rc;
 
-	/* Copy the user-supplied parameters, because U will not be valid. */
+	/*
+	 * Copy the user-supplied parameters, because U will not be valid
+	 * after we signal the main thread that we have started running.
+	 */
 	start_routine = U->start_routine;
 	arg = U->arg;
 
