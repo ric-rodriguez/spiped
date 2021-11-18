@@ -18,39 +18,6 @@ struct wrapped_cookie {
 	int rc_sync;		/* non-zero if synchronization failed. */
 };
 
-/* Set the "running" flag and signal the condition variable. */
-static int
-set_running(struct wrapped_cookie * U)
-{
-	int rc;
-
-	/* Lock mutex. */
-	if ((rc = pthread_mutex_lock(&U->mutex)))
-		goto err0;
-
-	/* Set the "running" flag and signal the condition variable. */
-	U->running = 1;
-	if ((rc = pthread_cond_signal(&U->cond)))
-		goto err1;
-
-	/* Unlock mutex. */
-	if ((rc = pthread_mutex_unlock(&U->mutex)))
-		goto err0;
-
-	/* Success! */
-	return (0);
-
-err1:
-	/*
-	 * Don't record any errors in this clean-up; the existing value of rc
-	 * is more important.
-	 */
-	pthread_mutex_unlock(&U->mutex);
-err0:
-	/* Failure! */
-	return (rc);
-}
-
 /* Routine which is executed by pthread_create(). */
 static void *
 wrapped_thread(void * cookie)
@@ -67,15 +34,34 @@ wrapped_thread(void * cookie)
 	start_routine = U->start_routine;
 	arg = U->arg;
 
-	/* Indicate that the main thread can continue (which will free U). */
-	if ((rc = set_running(U)) != 0) {
-		/* If there was an error, then we can still write to U. */
-		U->rc_sync = rc;
-		return (NULL);
-	}
+	/* Lock mutex. */
+	if ((rc = pthread_mutex_lock(&U->mutex)))
+		goto err1;
+
+	/* Set the "running" flag and signal the condition variable. */
+	U->running = 1;
+	if ((rc = pthread_cond_signal(&U->cond)))
+		goto err2;
+
+	/* Unlock mutex.  This allows the main thread to free U. */
+	if ((rc = pthread_mutex_unlock(&U->mutex)))
+		goto err1;
 
 	/* Run the desired routine. */
 	return (start_routine(arg));
+
+err2:
+	/*
+	 * Don't record any errors in this clean-up; the existing value of rc
+	 * is more important.
+	 */
+	pthread_mutex_unlock(&U->mutex);
+err1:
+	/* If there was an error, then we can still write to U. */
+	U->rc_sync = rc;
+
+	/* Failure! */
+	return (NULL);
 }
 
 /**
