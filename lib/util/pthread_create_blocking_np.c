@@ -118,7 +118,15 @@ pthread_create_blocking_np(pthread_t * restrict thread,
 
 	/* Wait for the thread to have started, then unlock the mutex. */
 	while (!U->running) {
-		/* Wait until signalled. */
+		/*
+		 * Wait until signalled.  If very low-level pthread functions
+		 * (pthread_mutex_lock, pthread_cond_signal, and
+		 * pthread_mutex_unlock) are broken, then this will lead to a
+		 * deadlock.  The alternative would be to take a polling
+		 * approach with pthread_cond_timedwait, but that would
+		 * complicate the code to avoid a likely-completely-theoretical
+		 * problem.
+		 */
 		if ((rc = pthread_cond_wait(&U->cond, &U->mutex)) != 0)
 			goto err5;
 
